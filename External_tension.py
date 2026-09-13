@@ -1,3 +1,5 @@
+
+
 from hydrogram import Client, filters
 from hydrogram.errors import (
     FloodWait,
@@ -42,12 +44,11 @@ INTERNAL_REPORT_TEXT = """البلاغ الداخلي 👮‍♂️
 ما هو البلاغ الداخلي؟ 🤔
 هو نظام يمكن البوت من استخدام حسابك الشخصي (بشكل آمن تماماً) لرفع البلاغات الرسمية داخل تيليغرام ضد القنوات أو الحسابات المخالفة تلقائياً.
 
-اربط حسابك مرة واحدة وسيتولى البوت الباقي.
-
-لا يوجد حساب مرتبط
-└ الحالة : غير مفعل"""
+اربط حسابك مرة واحدة وسيتولى البوت الباقي."""
 
 LINK_PHONE_TEXT = """ربط الحساب 🕯️
+
+⚠️ **تنبيه هام:** يجب تسجيل الدخول بحسابك أولاً لكي تتمكن من استخدام هذه الميزة.
 
 أرسل رقم هاتفك مع رمز الدولة
 
@@ -111,15 +112,9 @@ RESET_MEMBERS_TEXT = """تصفير أعضاء 💀 - الخطوة 1 من 2
 • `https://t.me/+Abcdefg12345`
 • `-1001234567890`"""
 
-NOT_LINKED_RESET_TEXT = """تصفير أعضاء 💀
+UNLINKED_TEXT = """تسجيل الدخول 🔑
 
-يجب ربط حسابك التليغرام أولاً قبل استخدام هذه الميزة.
-
-اذهب إلى بلاغ داخلي واربط حسابك ثم ارجع."""
-
-UNLINKED_TEXT = """البلاغ الداخلي 👮‍♂️
-
-تم فك ربط الحساب بنجاح."""
+تم فك ربط وحذف الحساب بنجاح."""
 
 CANCEL_REPORT_MARKUP = InlineKeyboardMarkup(
     [[InlineKeyboardButton("إلغاء 💀", callback_data="back_to_home")]]
@@ -146,6 +141,37 @@ METHOD_2_GUIDE = """🔑 **شرح إضافة حساب عبر كلمة المرو
 DB_FILE = "sessions_data.json"
 EMAILS_DB_FILE = "emails_data.json"
 MAIN_PHOTO = "https://j.top4top.io/p_3903trolt1.jpg"
+
+def parse_target_input(text):
+    text = text.strip()
+    if text.startswith("-") or text.isdigit():
+        try:
+            return int(text)
+        except:
+            return text
+    if "t.me/+" in text or "t.me/joinchat/" in text:
+        return text
+    if "t.me/" in text:
+        parts = text.split("t.me/")
+        path = parts[1].split("/")[0].strip()
+        if path.isdigit() or path.startswith("-"):
+            try:
+                return int(path)
+            except:
+                return path
+        if path == "c":
+            sub_parts = parts[1].split("/")
+            if len(sub_parts) > 1:
+                try:
+                    return int("-100" + sub_parts[1])
+                except:
+                    pass
+        return "@" + path.replace("@", "")
+    if text.startswith("@"):
+        return text
+    if not text.startswith("http") and " " not in text:
+        return "@" + text
+    return text
 
 def load_all_data():
     if os.path.exists(DB_FILE):
@@ -291,6 +317,9 @@ def send_email_to_target(sender_email, sender_password, target_email, subject, b
         return False
 
 def get_main_markup(user_id):
+    is_linked = check_user_session(user_id)
+    login_btn_text = "تسجيل الدخول للحساب" if is_linked else "تسجيل الدخول 🔑"
+    
     keyboard = [
         [
             InlineKeyboardButton("رفع بلاغ ⚡", callback_data="report"),
@@ -300,18 +329,17 @@ def get_main_markup(user_id):
             InlineKeyboardButton("سجل البلاغات 📅", callback_data="history"),
         ],
         [
+            InlineKeyboardButton(login_btn_text, callback_data="quick_login"),
+        ],
+        [
             InlineKeyboardButton("بلاغ داخلي 👮‍♂️", callback_data="internal_report"),
             InlineKeyboardButton("تصفير أعضاء 💀", callback_data="reset_members"),
         ],
         [
             InlineKeyboardButton("جلساتي 📂", callback_data="my_sessions"),
+            InlineKeyboardButton("خمط أعضاء 🏴‍☠️", callback_data="steal_members"),
         ],
     ]
-    if user_id == ADMIN_ID:
-        keyboard.append([
-            InlineKeyboardButton("إذاعة 📢", callback_data="broadcast"),
-            InlineKeyboardButton("إحصائيات البوت 📊", callback_data="bot_stats"),
-        ])
     keyboard.append([
         InlineKeyboardButton("المطور 🏴‍☠️", url="https://t.me/its_h_q"),
     ])
@@ -323,16 +351,9 @@ history_empty_markup = InlineKeyboardMarkup(
     ]
 )
 
-internal_report_markup = InlineKeyboardMarkup(
-    [
-        [InlineKeyboardButton("ربط حسابي 🔮", callback_data="link_account")],
-        [InlineKeyboardButton("رجوع 🏴‍☠️", callback_data="back_to_home")],
-    ]
-)
-
 cancel_link_markup = InlineKeyboardMarkup(
     [
-        [InlineKeyboardButton("إلغاء 💀", callback_data="internal_report")],
+        [InlineKeyboardButton("إلغاء 💀", callback_data="back_to_home")],
         [InlineKeyboardButton("رجوع 🏠", callback_data="back_to_home")]
     ]
 )
@@ -362,12 +383,6 @@ cancel_reset_markup = InlineKeyboardMarkup(
     [
         [InlineKeyboardButton("إلغاء 💀", callback_data="back_to_home")],
         [InlineKeyboardButton("رجوع 🏠", callback_data="back_to_home")]
-    ]
-)
-
-not_linked_reset_markup = InlineKeyboardMarkup(
-    [
-        [InlineKeyboardButton("القائمة الرئيسية 🏠", callback_data="back_to_home")]
     ]
 )
 
@@ -419,6 +434,66 @@ async def callback_handler(client, callback_query):
     data = callback_query.data
     user_id = callback_query.from_user.id
     is_linked = check_user_session(user_id)
+
+    if data == "quick_login":
+        await callback_query.answer()
+        if is_linked:
+            record = get_user_record(user_id)
+            phone = record.get("phone") if record else "غير معروف"
+            linked_text = f"""تسجيل الدخول 🔑
+
+حسابك مسجل ومرتبط بالفعل بالنظام بنجاح ✅
+الرقم المرتبط: +{phone}
+
+يمكنك الآن استخدام ميزات (البلاغ الداخلي، تصفير الأعضاء، وخمط الأعضاء) مباشرة دون الحاجة لتسجيل دخول جديد."""
+            
+            # تم إزالة زر تسجيل الخروج من هنا بناءً على طلبك
+            linked_markup = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("رجوع 🏠", callback_data="back_to_home")]
+                ]
+            )
+            await callback_query.message.edit_text(text=linked_text, reply_markup=linked_markup)
+        else:
+            user_states[user_id] = "WAITING_PHONE"
+            await callback_query.message.edit_text(text=LINK_PHONE_TEXT, reply_markup=cancel_link_markup)
+        return
+
+    if data == "steal_members":
+        if not is_linked:
+            await callback_query.answer("⚠️ يجب تسجيل الدخول أولاً لاستخدام هذه الميزة!", show_alert=True)
+            return
+
+        user_states[user_id] = "WAITING_STEAL_FROM"
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        user_data[user_id]["steal_paused"] = False
+        await callback_query.answer()
+        
+        steal_guide_text = (
+            "🏴‍☠️ **قسم خمط ونقل الأعضاء – الشرح وآلية العمل:**\n\n"
+            "• **الحالة الأولى (قائمة الأعضاء مفتوحة):** إذا كانت المجموعة تسمح للجميع برؤية الأعضاء، سيقوم البوت بسحب ونقل كافة الأعضاء بشكل طبيعي.\n"
+            "• **الحالة الثانية (قائمة الأعضاء مقفولة/مخفية):** إذا كانت المجموعة تخفي الأعضاء، فلن يتمكن البوت من سحب الأعضاء العاديين، وسيقوم حصرياً بسحب وإضافة **المشرفين، المالكين، ورتب القناة** المتاحين فقط.\n\n"
+            "👇 **الخطوة 1 من 3:** أرسل معرف، رابط، أو أيدي الكروب / القناة **المصدر** (التي تريد سحب الأعضاء منها):"
+        )
+
+        await callback_query.message.edit_text(
+            text=steal_guide_text,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("إلغاء 💀", callback_data="back_to_home")]])
+        )
+        return
+
+    if data == "pause_steal":
+        if user_id in user_data:
+            user_data[user_id]["steal_paused"] = True
+        await callback_query.answer("🛑 تم إيقاف عملية الخمط مؤقتاً!", show_alert=True)
+        return
+
+    if data == "resume_steal":
+        if user_id in user_data:
+            user_data[user_id]["steal_paused"] = False
+        await callback_query.answer("▶️ تم استئناف عملية الخمط بنجاح!", show_alert=True)
+        return
 
     if data.startswith("reason_"):
         reason_map = {
@@ -561,74 +636,45 @@ async def callback_handler(client, callback_query):
         
         sessions_text = f"""إدارة الجلسات 📂
 
-• حالتك الحالية: {"🟢 مرتبط" if is_linked else "🔴 غير مرتبط"}
+• حالتك الحالية: {"🟢 مسجل الدخول" if is_linked else "🔴 غير مسجل"}
 • رقمك المرتبط: {f"+{phone_val}" if is_linked else "لا يوجد"}"""
 
-        sessions_markup = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("القائمة الرئيسية 🏠", callback_data="back_to_home")]
-            ]
-        )
+        sessions_buttons = []
+        if is_linked:
+            sessions_buttons.append([InlineKeyboardButton("تسجيل الخروج 👁‍🗨", callback_data="logout")])
+        
+        sessions_buttons.append([InlineKeyboardButton("القائمة الرئيسية 🏠", callback_data="back_to_home")])
+        
+        sessions_markup = InlineKeyboardMarkup(sessions_buttons)
         await callback_query.message.edit_text(text=sessions_text, reply_markup=sessions_markup)
 
-    elif data == "broadcast":
-        if user_id != ADMIN_ID:
-            await callback_query.answer("هذا الزر للمطور حصراً ❌", show_alert=True)
-            return
-        user_states[user_id] = "WAITING_BROADCAST"
-        await callback_query.answer()
-        await callback_query.message.edit_text(
-            text="📢 أرسل الآن رسالة الإذاعة (صورة، نص، أو ميديا) ليتم إرسالها لجميع المستخدمين:",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("إلغاء 💀", callback_data="back_to_home")]])
-        )
-
-    elif data == "bot_stats":
-        if user_id != ADMIN_ID:
-            await callback_query.answer("هذا الزر للمطور حصراً ❌", show_alert=True)
-            return
-        all_data = load_all_data()
-        stats_text = f"""إحصائيات البوت 📊
-
-• عدد الجلسات المرتبطة المخزنة: {len(all_data)}
-• حالة البوت: يعمل بكفاءة 🟢"""
-
-        stats_markup = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("القائمة الرئيسية 🏠", callback_data="back_to_home")]]
-        )
-        await callback_query.answer()
-        await callback_query.message.edit_text(text=stats_text, reply_markup=stats_markup)
-
     elif data == "internal_report":
+        if not is_linked:
+            await callback_query.answer("⚠️ يجب تسجيل الدخول أولاً لاستخدام هذه الميزة!", show_alert=True)
+            return
+
         user_states[user_id] = None
         await callback_query.answer()
-        
-        if is_linked:
-            record = get_user_record(user_id)
-            phone = record.get("phone") if record else "غير معروف"
-            linked_text = f"""البلاغ الداخلي 👮‍♂️
+        record = get_user_record(user_id)
+        phone = record.get("phone") if record else "غير معروف"
+        linked_text = f"""البلاغ الداخلي 👮‍♂️
 
-اربط حسابك مرة واحدة وسيرفع البوت البلاغات الداخلية تلقائياً من خلاله.
-
-الحساب مرتبط
+الحساب مسجل ومرتبط بنجاح ✅
 الرقم: +{phone}
 الحالة: جاهز للبلاغ"""
 
-            linked_markup = InlineKeyboardMarkup(
-                [
-                    [InlineKeyboardButton("إرسال بلاغ 💀", callback_data="target_report")],
-                    [InlineKeyboardButton("تسجيل الخروج 👁‍🗨", callback_data="logout")],
-                    [InlineKeyboardButton("رجوع 🏴‍☠️", callback_data="back_to_home")],
-                ]
-            )
-            await callback_query.message.edit_text(text=linked_text, reply_markup=linked_markup)
-        else:
-            await callback_query.message.edit_text(text=INTERNAL_REPORT_TEXT, reply_markup=internal_report_markup)
+        linked_markup = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("إرسال بلاغ 💀", callback_data="target_report")],
+                [InlineKeyboardButton("تسجيل الخروج 👁‍🗨", callback_data="logout")],
+                [InlineKeyboardButton("رجوع 🏴‍☠️", callback_data="back_to_home")],
+            ]
+        )
+        await callback_query.message.edit_text(text=linked_text, reply_markup=linked_markup)
 
     elif data == "target_report":
         if not is_linked:
-            user_states[user_id] = None
-            await callback_query.answer("يجب عليك ربط حسابك أولاً لتتمكن من إرسال البلاغات!", show_alert=True)
-            await callback_query.message.edit_text(text=INTERNAL_REPORT_TEXT, reply_markup=internal_report_markup)
+            await callback_query.answer("⚠️ يجب تسجيل الدخول أولاً!", show_alert=True)
             return
 
         user_states[user_id] = "WAITING_TARGET"
@@ -764,17 +810,15 @@ async def callback_handler(client, callback_query):
         )
 
     elif data == "reset_members":
-        await callback_query.answer()
         if not is_linked:
-            user_states[user_id] = None
-            await callback_query.message.edit_text(
-                text=NOT_LINKED_RESET_TEXT, reply_markup=not_linked_reset_markup, disable_web_page_preview=True
-            )
-        else:
-            user_states[user_id] = "WAITING_RESET_TARGET"
-            await callback_query.message.edit_text(
-                text=RESET_MEMBERS_TEXT, reply_markup=cancel_reset_markup, disable_web_page_preview=True
-            )
+            await callback_query.answer("⚠️ يجب تسجيل الدخول أولاً لاستخدام هذه الميزة!", show_alert=True)
+            return
+
+        await callback_query.answer()
+        user_states[user_id] = "WAITING_RESET_TARGET"
+        await callback_query.message.edit_text(
+            text=RESET_MEMBERS_TEXT, reply_markup=cancel_reset_markup, disable_web_page_preview=True
+        )
 
     elif data.startswith("rcount_"):
         count_val = int(data.replace("rcount_", ""))
@@ -827,7 +871,7 @@ async def callback_handler(client, callback_query):
 
         record = get_user_record(user_id)
         if not record or "session_string" not in record:
-            await progress_msg.edit_text("❌ يجب عليك ربط حسابك أولاً (عبر بلاغ داخلي -> ربط حسابي) لكي يتم استخدام صلاحياتك في طرد الأعضاء!")
+            await progress_msg.edit_text("❌ يجب عليك تسجيل الدخول أولاً لكي يتم استخدام صلاحياتك في طرد الأعضاء!")
             return
 
         action_client = Client(
@@ -840,19 +884,13 @@ async def callback_handler(client, callback_query):
 
         try:
             await action_client.connect()
-            target_chat_id = raw_reset_target
+            parsed_target = parse_target_input(raw_reset_target)
             try:
-                if str(raw_reset_target).startswith("-") or str(raw_reset_target).isdigit():
-                    target_chat_id = int(raw_reset_target)
-                elif "t.me/+" in raw_reset_target or "t.me/joinchat/" in raw_reset_target:
+                if "t.me/+" in str(raw_reset_target) or "t.me/joinchat/" in str(raw_reset_target):
                     chat_obj = await action_client.join_chat(raw_reset_target)
                     target_chat_id = chat_obj.id
-                elif "t.me/" in raw_reset_target:
-                    username = raw_reset_target.split("/")[-1].replace("@", "")
-                    chat_obj = await action_client.get_chat(username)
-                    target_chat_id = chat_obj.id
                 else:
-                    chat_obj = await action_client.get_chat(raw_reset_target)
+                    chat_obj = await action_client.get_chat(parsed_target)
                     target_chat_id = chat_obj.id
             except Exception as resolve_err:
                 try:
@@ -917,12 +955,10 @@ async def callback_handler(client, callback_query):
             del user_data[user_id]
 
         await callback_query.answer("تم تسجيل الخروج بنجاح")
-        await callback_query.message.edit_text(text=UNLINKED_TEXT, reply_markup=internal_report_markup)
-
-    elif data == "link_account":
-        user_states[user_id] = "WAITING_PHONE"
-        await callback_query.answer()
-        await callback_query.message.edit_text(text=LINK_PHONE_TEXT, reply_markup=cancel_link_markup)
+        await callback_query.message.edit_text(text=UNLINKED_TEXT, reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("تسجيل الدخول 🔑", callback_data="quick_login")],
+            [InlineKeyboardButton("القائمة الرئيسية 🏠", callback_data="back_to_home")]
+        ]))
 
     elif data == "add_account":
         user_states[user_id] = None
@@ -997,6 +1033,167 @@ async def handle_user_input(client: Client, message: Message):
     user_id = message.from_user.id
     state = user_states.get(user_id)
     text = message.text.strip()
+
+    if state == "WAITING_STEAL_FROM":
+        target_input = text
+        wait_msg = await message.reply_text("🔍 جاري فحص والتحقق من الكروب المصدر...")
+        
+        record = get_user_record(user_id)
+        if not record or "session_string" not in record:
+            await wait_msg.edit_text("❌ يجب عليك تسجيل الدخول أولاً!")
+            return
+
+        temp_client = Client(
+            name=f"check_steal_{user_id}",
+            api_id=31244607,
+            api_hash="02d3b988051dd895b962450d2fb34fea",
+            session_string=record["session_string"],
+            in_memory=True
+        )
+
+        try:
+            await temp_client.connect()
+            parsed_target = parse_target_input(target_input)
+            
+            if "t.me/+" in target_input or "t.me/joinchat/" in target_input:
+                chat_obj = await temp_client.join_chat(target_input)
+            else:
+                chat_obj = await temp_client.get_chat(parsed_target)
+                
+            user_data[user_id]["steal_from"] = chat_obj.id
+            await temp_client.disconnect()
+            
+            await wait_msg.delete()
+            user_states[user_id] = "WAITING_STEAL_TO"
+            await message.reply_text(
+                f"🏴‍☠️ **خمط ونقل الأعضاء – الخطوة 2 من 3**\n\n✅ تم التعرف على المصدر: `{chat_obj.title}`\n\nأدخل معرف، رابط، أو أيدي الكروب / القناة **الهدف** (التي تريد نقل الأعضاء إليها):",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("إلغاء 💀", callback_data="back_to_home")]])
+            )
+        except Exception as e:
+            try:
+                await temp_client.disconnect()
+            except:
+                pass
+            await wait_msg.edit_text(f"❌ تعذر العثور على الكروب المصدر أو التأكد منه:\n`{e}`\n\nتأكد أن الأيدي صحيح وأن الحساب منضم إليه.")
+        return
+
+    elif state == "WAITING_STEAL_TO":
+        target_input = text
+        wait_msg = await message.reply_text("🔍 جاري التحقق من الكروب الهدف...")
+        
+        record = get_user_record(user_id)
+        temp_client = Client(
+            name=f"check_stealto_{user_id}",
+            api_id=31244607,
+            api_hash="02d3b988051dd895b962450d2fb34fea",
+            session_string=record["session_string"],
+            in_memory=True
+        )
+
+        try:
+            await temp_client.connect()
+            parsed_target = parse_target_input(target_input)
+            
+            if "t.me/+" in target_input or "t.me/joinchat/" in target_input:
+                chat_obj = await temp_client.join_chat(target_input)
+            else:
+                chat_obj = await temp_client.get_chat(parsed_target)
+                
+            user_data[user_id]["steal_to"] = chat_obj.id
+            await temp_client.disconnect()
+            
+            await wait_msg.delete()
+            user_states[user_id] = "WAITING_STEAL_SLEEP"
+            await message.reply_text(
+                f"🏴‍☠️ **خمط ونقل الأعضاء – الخطوة الأخيرة**\n\n✅ تم التعرف على الهدف: `{chat_obj.title}`\n\nأدخل وقت السكون (الانتظار) بالثواني بين إضافة كل عضو (مثال: `2` أو `3`)، أو اكتب `بدون وقت` للإرسال بأقصى سرعة:",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("إلغاء 💀", callback_data="back_to_home")]])
+            )
+        except Exception as e:
+            try:
+                await temp_client.disconnect()
+            except:
+                pass
+            await wait_msg.edit_text(f"❌ تعذر الوصول للكروب الهدف:\n`{e}`\n\nتأكد أن الأيدي أو الرابط صحيح وأن الحساب لديه صلاحيات.")
+        return
+
+    elif state == "WAITING_STEAL_SLEEP":
+        if text.lower() == 'بدون وقت':
+            sleep_time = 0
+        else:
+            try:
+                sleep_time = int(text)
+            except ValueError:
+                await message.reply_text("❌ يرجى إدخال رقم صحيح بالثواني أو كتابة `بدون وقت`:")
+                return
+
+        user_data[user_id]["steal_sleep"] = sleep_time
+        user_states[user_id] = None
+
+        from_group = user_data[user_id].get("steal_from")
+        to_group = user_data[user_id].get("steal_to")
+
+        steal_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("إيقاف مؤقت 🛑", callback_data="pause_steal"), InlineKeyboardButton("استئناف ▶️", callback_data="resume_steal")],
+            [InlineKeyboardButton("إلغاء 💀", callback_data="back_to_home")]
+        ])
+
+        progress_msg = await message.reply_text(
+            f"🚀 **جاري بدء عملية نقل الأعضاء...**\n\n• المصدر: `{from_group}`\n• الهدف: `{to_group}`\n• الانتظار: `{sleep_time} ثانية`",
+            reply_markup=steal_markup,
+            disable_web_page_preview=True
+        )
+
+        record = get_user_record(user_id)
+        if not record or "session_string" not in record:
+            await progress_msg.edit_text("❌ يجب عليك تسجيل الدخول أولاً لتنفيذ عملية نقل الأعضاء!")
+            return
+
+        steal_client = Client(
+            name=f"steal_action_{user_id}",
+            api_id=31244607,
+            api_hash="02d3b988051dd895b962450d2fb34fea",
+            session_string=record["session_string"],
+            in_memory=True
+        )
+
+        success_count = 0
+        fail_count = 0
+
+        try:
+            await steal_client.connect()
+            participants = []
+            async for member in steal_client.get_chat_members(from_group):
+                if not member.user.is_bot:
+                    participants.append(member.user)
+
+            for user in participants:
+                while user_data.get(user_id, {}).get("steal_paused", False):
+                    await asyncio.sleep(1)
+
+                try:
+                    await steal_client.add_chat_members(to_group, user.id)
+                    success_count += 1
+                    if sleep_time > 0:
+                        await asyncio.sleep(sleep_time)
+                except Exception as e:
+                    fail_count += 1
+                    if isinstance(e, FloodWait):
+                        await asyncio.sleep(e.value)
+
+            await steal_client.disconnect()
+        except Exception as e:
+            try:
+                await steal_client.disconnect()
+            except:
+                pass
+            await progress_msg.edit_text(f"❌ حدث خطأ أثناء نقل الأعضاء:\n`{e}`")
+            return
+
+        await progress_msg.edit_text(
+            f"✅ **تم الانتهاء من عملية نقل الأعضاء بنجاح!**\n\n• المصدر: `{from_group}`\n• الهدف: `{to_group}`\n• تم نقلهم بنجاح: {success_count}\n• فشل: {fail_count}",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("القائمة الرئيسية 🏠", callback_data="back_to_home")]])
+        )
+        return
 
     if state in ["WAITING_NEW_EMAIL_M1", "WAITING_NEW_EMAIL_M2"]:
         if "@" not in text:
@@ -1184,31 +1381,7 @@ async def handle_user_input(client: Client, message: Message):
         )
         return
 
-    if state == "WAITING_BROADCAST":
-        if user_id != ADMIN_ID:
-            user_states[user_id] = None
-            return
-        
-        user_states[user_id] = None
-        sent_progress = await message.reply_text("📢 جاري بدء الإذاعة لجميع المستخدمين...")
-        
-        success = 0
-        failed = 0
-        all_data = load_all_data()
-        target_users = [int(uid) for uid in all_data.keys()]
-
-        for uid in target_users:
-            try:
-                await message.copy(uid)
-                success += 1
-                await asyncio.sleep(0.1)
-            except:
-                failed += 1
-
-        await sent_progress.edit_text(f"✅ تمت الإذاعة بنجاح!\n• وصل إلى: {success} مستخدم\n• فشل الإرسال إلى: {failed} مستخدم")
-        return
-
-    if state == "WAITING_PHONE":
+    elif state == "WAITING_PHONE":
         phone_number = re.sub(r'\s+', '', text)
         if user_id not in user_data:
             user_data[user_id] = {}
@@ -1244,7 +1417,7 @@ async def handle_user_input(client: Client, message: Message):
 
         if not phone or not phone_code_hash or not user_client:
             user_states[user_id] = None
-            await message.reply_text("❌ انتهت الجلسة المؤقتة، يرجى إعادة إرسال رقم الهاتف من جديد عبر (بلاغ داخلي -> ربط حسابي).")
+            await message.reply_text("❌ انتهت الجلسة المؤقتة، يرجى إعادة إرسال رقم الهاتف من جديد.")
             return
 
         sent_msg = await message.reply_text("🕯️ جاري التحقق من الكود وحفظ الجلسة بالنظام...")
@@ -1270,20 +1443,16 @@ async def handle_user_input(client: Client, message: Message):
             save_user_record(user_id, phone, session_string)
             user_states[user_id] = None
 
-            linked_text = f"""البلاغ الداخلي 👮‍♂️
+            linked_text = f"""تسجيل الدخول 🔑
 
-اربط حسابك مرة واحدة وسيرفع البوت البلاغات الداخلية تلقائياً من خلاله.
-
-الحساب مرتبط
+تم تسجيل الدخول بنجاح وحفظ الجلسة ✅
 الرقم: +{phone}
-الحالة: جاهز للبلاغ
-تم حفظ الجلسة بنجاح 📂"""
+
+أصبح بإمكانك استخدام (البلاغ الداخلي، تصفير الأعضاء، وخمط الأعضاء) فوراً."""
 
             linked_markup = InlineKeyboardMarkup(
                 [
-                    [InlineKeyboardButton("إرسال بلاغ 💀", callback_data="target_report")],
-                    [InlineKeyboardButton("تسجيل الخروج 👁‍🗨", callback_data="logout")],
-                    [InlineKeyboardButton("رجوع 🏴‍☠️", callback_data="back_to_home")],
+                    [InlineKeyboardButton("القائمة الرئيسية 🏠", callback_data="back_to_home")],
                 ]
             )
             await sent_msg.edit_text(linked_text, reply_markup=linked_markup)
@@ -1296,7 +1465,7 @@ async def handle_user_input(client: Client, message: Message):
                 await user_client.disconnect()
             except:
                 pass
-            await sent_msg.edit_text("❌ انتهت صلاحية الكود.\n\nيرجى العودة إلى (بلاغ داخلي -> ربط حسابي) وإرسال رقمك من جديد.")
+            await sent_msg.edit_text("❌ انتهت صلاحية الكود.\n\nيرجى إعادة المحاولة من القائمة الرئيسية.")
         except Exception as e:
             try:
                 await user_client.disconnect()
@@ -1323,20 +1492,16 @@ async def handle_user_input(client: Client, message: Message):
             save_user_record(user_id, phone, session_string)
             user_states[user_id] = None
 
-            linked_text = f"""البلاغ الداخلي 👮‍♂️
+            linked_text = f"""تسجيل الدخول 🔑
 
-اربط حسابك مرة واحدة وسيرفع البوت البلاغات الداخلية تلقائياً من خلاله.
-
-الحساب مرتبط
+تم تسجيل الدخول بنجاح وحفظ الجلسة ✅
 الرقم: +{phone}
-الحالة: جاهز للبلاغ
-تم حفظ الجلسة بنجاح 📂"""
+
+أصبح بإمكانك استخدام (البلاغ الداخلي، تصفير الأعضاء، وخمط الأعضاء) فوراً."""
 
             linked_markup = InlineKeyboardMarkup(
                 [
-                    [InlineKeyboardButton("إرسال بلاغ 💀", callback_data="target_report")],
-                    [InlineKeyboardButton("تسجيل الخروج 👁‍🗨", callback_data="logout")],
-                    [InlineKeyboardButton("رجوع 🏴‍☠️", callback_data="back_to_home")],
+                    [InlineKeyboardButton("القائمة الرئيسية 🏠", callback_data="back_to_home")],
                 ]
             )
             await sent_msg.edit_text(linked_text, reply_markup=linked_markup)
@@ -1359,7 +1524,7 @@ async def handle_user_input(client: Client, message: Message):
         reason_menu_text = f"""سبب البلاغ 🏴‍☠️
 
 الهدف : `{target}`
-النوع : حساب / قناة / مجموعة
+النوع : حساب / قناة / المجموعة
 
 اختر سبب البلاغ :"""
 
@@ -1424,7 +1589,7 @@ async def handle_user_input(client: Client, message: Message):
 
         record = get_user_record(user_id)
         if not record or "session_string" not in record:
-            await progress_msg.edit_text("❌ يجب عليك ربط حسابك أولاً (عبر بلاغ داخلي -> ربط حسابي) لكي تتمكن من إرسال البلاغات!")
+            await progress_msg.edit_text("❌ يجب عليك تسجيل الدخول أولاً لكي تتمكن من إرسال البلاغات!")
             return
 
         action_client = Client(
@@ -1437,7 +1602,8 @@ async def handle_user_input(client: Client, message: Message):
 
         try:
             await action_client.connect()
-            peer = await action_client.resolve_peer(target)
+            parsed_target = parse_target_input(target)
+            peer = await action_client.resolve_peer(parsed_target)
             
             from hydrogram.raw.types import (
                 InputReportReasonSpam, 
@@ -1614,3 +1780,6 @@ if __name__ == "__main__":
     cleanup_old_sessions()
     print("Bot is running with StringSession & In-Memory support (No local session files)...")
     app.run()
+
+
+
